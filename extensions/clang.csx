@@ -6,10 +6,12 @@
 
 ---------------------------------------------------------------------------------------------------------*/
 
-#load "extensions/fastbuild.csx"
+#load "fastbuild.csx"
+
+public enum FastBuildMode { Disabled, Enabled, Auto }
 
 /// <summary>
-/// It provides functionality to deal with the clang compiler in top of the Kombine Tool
+/// It provides functionality to deal with the clang compiler in top of the Kombine Tool.
 /// </summary>
 public class Clang {
 
@@ -49,7 +51,27 @@ public class Clang {
 		/// Set the current options as default for the tool using the shared objects
 		/// </summary>
 		public void SetAsDefault(){
-			Share.Set("ClangOptions",this);
+			// Share a shallow copy without FastBuildOptions to avoid type identity issues across scripts
+			var sharedOptions = new ClangOptions(){
+				CC = this.CC,
+				CXX = this.CXX,
+				LD = this.LD,
+				AR = this.AR,
+				CExtension = this.CExtension,
+				CppExtension = this.CppExtension,
+				IncludeDirs = new KList(this.IncludeDirs),
+				Defines = new KList(this.Defines),
+				SwitchesCC = new KList(this.SwitchesCC),
+				SwitchesCXX = new KList(this.SwitchesCXX),
+				LibraryDirs = new KList(this.LibraryDirs),
+				Libraries = new KList(this.Libraries),
+				SwitchesLD = new KList(this.SwitchesLD),
+				ConcurrentBuild = this.ConcurrentBuild,
+				Verbose = this.Verbose,
+				UseFastBuildMode = this.UseFastBuildMode
+				// Intentionally NOT copying FastBuildOptions; keep per-script defaults
+			};
+			Share.Set("ClangOptions", sharedOptions);
 		}
 
 		/// <summary>
@@ -128,32 +150,33 @@ public class Clang {
 		public bool Verbose { get; set; } = false;
 
 		/// <summary>
-		/// Enable FastBuild integration (opt-in).
+		/// Tri-state FastBuild mode: Disabled, Enabled, Auto (trueIfInstalled).
+		/// Default Disabled to preserve backward compatibility.
 		/// </summary>
-		public bool UseFastBuild { get; set; } = false;
-
+		public FastBuildMode UseFastBuildMode { get; set; } = FastBuildMode.Auto;
+		
 		/// <summary>
 		/// FastBuild specific options.
 		/// </summary>
 		public FastBuildOptions FastBuildOptions { get; set; } = new FastBuildOptions();
 
 		/// <summary>
-		/// Contains the recomended static library extension for the current platform
+		/// Contains the recommended static library extension for the current platform
 		/// </summary>
 		public string LibExtension { get; private set; } = ".a";
 
 		/// <summary>
-		/// Contains the recomended shared library extension for the current platform
+		/// Contains the recommended shared library extension for the current platform
 		/// </summary>
 		public string SharedExtension { get; private set; } = ".so";
 
 		/// <summary>
-		/// Contains the recomended binary extension for the current platform
+		/// Contains the recommended binary extension for the current platform
 		/// </summary>
 		public string BinaryExtension { get; private set; } = ".out";
 
 		/// <summary>
-		/// Contains the recomended object extension for the current platform
+		/// Contains the recommended object extension for the current platform
 		/// </summary>
 		public string ObjectExtension { get; private set; } = ".o";		
 	}
@@ -171,7 +194,24 @@ public class Clang {
 	/// </summary>
 	public ClangOptions Options { get; private set; } = new ClangOptions();
 
-	// FastBuild accumulation state (used only when Options.UseFastBuild = true)
+	private bool ShouldUseFastBuild() {
+		switch (Options.UseFastBuildMode) {
+			case FastBuildMode.Enabled:
+				return true;
+			case FastBuildMode.Auto:
+				bool installed = FastBuildHelper.IsFastBuildInstalled(Options.FastBuildOptions, Options.Verbose || Options.FastBuildOptions.Verbose);
+				if (!installed) {
+					Msg.Print("FastBuild not found on PATH. Falling back to direct clang.", Msg.LogLevels.Verbose);
+					return false;
+				}
+				return true;
+			case FastBuildMode.Disabled:
+			default:
+				return false;
+		}
+	}
+
+	// FastBuild accumulation state (used only when Options.UseFastBuildMode != FastBuildMode.Disabled)
 	private KList fbSourcesC = new KList();
 	private KList fbSourcesCXX = new KList();
 	private KValue fbObjectsOutDir = string.Empty;
@@ -247,9 +287,9 @@ public class Clang {
 		Msg.Print("Switches for C++ compiler: "+switchesCXX);
 
 		// FastBuild path: accumulate compilation data and defer actual work to Linker/Librarian
-		if (Options.UseFastBuild) {
-			KList folders = obj.AsFolders();
-			Folders.Create(folders);
+		if (ShouldUseFastBuild()) {
+			KList objFolders = obj.AsFolders();
+			Folders.Create(objFolders);
 			if (obj.Count() > 0) fbObjectsOutDir = obj[0].AsFolder();
 			for (int a = 0; a != src.Count(); a++) {
 				KValue cmd = string.Empty;
@@ -335,7 +375,7 @@ public class Clang {
 	/// <returns>Tool result with the execution.</returns>
 	public ToolResult Librarian(KList objs,KValue output, bool abortwhenfailed = true) {
 		// FastBuild path for static library
-		if (Options.UseFastBuild) {
+		if (ShouldUseFastBuild()) {
 			Folders.Create(output.AsFolder());
 			if ((Host.IsLinux() || Host.IsMacOS()) ) {
 				output = output.WithNamePrefix("lib");
@@ -469,7 +509,7 @@ public class Clang {
 		Msg.Print("Switches for Linker: "+switchesLD);
 
 		// FastBuild path for Executable/SharedLibrary
-		if (Options.UseFastBuild) {
+		if (ShouldUseFastBuild()) {
 			// Ensure output dir exists
 			Folders.Create(output.AsFolder());
 			// Determine where to store the .bff
@@ -542,6 +582,44 @@ public class Clang {
 		}
 		Msg.Print("Linker: Nothing has done. Everything up to date.");
 		return ToolResult.DefaultNoChanges();
+	}
+
+	/// <summary>
+	/// Formats a list of files
+	/// </summary>
+	/// <param name="src">List of files to format</param>
+	/// <param name="abortwhenfailed">Abort operation if any file failed</param>
+	/// <returns></returns>
+	public static bool Format(KList src, string extraArgs, bool abortwhenfailed = true)
+	{
+		bool returnCode = true;
+		Msg.BeginIndent();
+		if (src.Count() == 0)
+		{
+			Msg.Print("No files to format.");
+			Msg.EndIndent();
+			return true;
+		}
+		Msg.Print("Formatting files:");
+		Msg.BeginIndent();
+		foreach (KValue file in src)
+		{
+			Msg.PrintTask("Formatting file: " + file);
+			int code = Shell("clang-format", $" -i \"{file}\"");
+			if (code != 0)
+			{
+				Msg.PrintTaskError(" Failed");
+				if (abortwhenfailed)
+				{
+					Msg.PrintAndAbort("Error: formatting operation failed");
+				}
+				returnCode = false;
+			}
+			Msg.PrintTaskSuccess(" Ok");
+		}
+		Msg.EndIndent();
+		Msg.EndIndent();
+		return returnCode;
 	}
 
 	/// <summary>
@@ -812,20 +890,9 @@ public class Clang {
 				Options.SwitchesLD = new KList(opt.SwitchesLD);
 				Options.ConcurrentBuild = opt.ConcurrentBuild;
 				Options.Verbose = opt.Verbose;
-				Options.UseFastBuild = opt.UseFastBuild;
-				if (opt.FastBuildOptions != null) {
-					Options.FastBuildOptions = new FastBuildOptions(){
-						Executable = opt.FastBuildOptions.Executable,
-						EnableCache = opt.FastBuildOptions.EnableCache,
-						EnableDistribution = opt.FastBuildOptions.EnableDistribution,
-						CacheMode = opt.FastBuildOptions.CacheMode,
-						CachePath = opt.FastBuildOptions.CachePath,
-						WorkerConnectionLimit = opt.FastBuildOptions.WorkerConnectionLimit,
-						Verbose = opt.FastBuildOptions.Verbose,
-						ShowProgress = opt.FastBuildOptions.ShowProgress,
-						AdditionalArgs = new KList(opt.FastBuildOptions.AdditionalArgs)
-					};
-				}
+				Options.UseFastBuildMode = opt.UseFastBuildMode;
+				// Do NOT copy FastBuildOptions to avoid cross-script type identity issues.
+				// Each script instance keeps its own FastBuildOptions with defaults or script-local configuration.
 				return;
 			}
 		}		

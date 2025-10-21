@@ -14,7 +14,7 @@ public class FastBuildOptions {
 	public bool EnableDistribution { get; set; } = false;
 	// CacheMode: r (read), w (write), rw (read-write)
 	public string CacheMode { get; set; } = "rw";
-	public KValue CachePath { get; set; } = string.Empty;
+	public string CachePath { get; set; } = string.Empty;
 	public int WorkerConnectionLimit { get; set; } = 0;
 	public bool Verbose { get; set; } = false;
 	public bool ShowProgress { get; set; } = true;
@@ -22,7 +22,7 @@ public class FastBuildOptions {
 }
 
 internal static class FastBuildHelper {
-	private static string NPath(KValue v) { return v.Replace("\\", "/"); }
+	private static string NPath(string v) { return v.Replace("\\", "/"); }
 	private static string Q(string s) { return "'" + s.Replace("'", "\''") + "'"; }
 
 	public static KValue GenerateBffForExecutable(
@@ -47,11 +47,11 @@ internal static class FastBuildHelper {
 	){
 		targetName = title;
 		var sb = new System.Text.StringBuilder();
-		sb.AppendLine(";===============================================================================");
+		sb.AppendLine(";==============================================================================");
 		sb.AppendLine($"; FastBuild configuration - {title}");
-		sb.AppendLine(";===============================================================================\n");
+		sb.AppendLine(";==============================================================================\n");
 		// Settings
-		if (!fbo.CachePath.IsEmpty()) {
+		if (!string.IsNullOrEmpty(fbo.CachePath)) {
 			sb.AppendLine($"Settings {{ .CachePath = {Q(NPath(fbo.CachePath))} }}\n");
 		} else {
 			sb.AppendLine("Settings { .CachePath = '' }\n");
@@ -139,7 +139,7 @@ internal static class FastBuildHelper {
 		sb.AppendLine($"; FastBuild configuration - {title}");
 		sb.AppendLine(";===============================================================================\n");
 		// Settings
-		if (!fbo.CachePath.IsEmpty()) {
+		if (!string.IsNullOrEmpty(fbo.CachePath)) {
 			sb.AppendLine($"Settings {{ .CachePath = {Q(NPath(fbo.CachePath))} }}\n");
 		} else {
 			sb.AppendLine("Settings { .CachePath = '' }\n");
@@ -191,7 +191,7 @@ internal static class FastBuildHelper {
 
 	public static ToolResult RunFastBuild(KValue bffPath, string alias, FastBuildOptions fbo, uint concurrency, bool verbose, bool abortWhenFailed) {
 		Tool tool = new Tool("FastBuild");
-		string args = $"-config {KValue.Escape(bffPath)} {alias}";
+    	string args = $"-config \"{bffPath}\" {alias}";
 		if (fbo.EnableCache) {
 			if (fbo.CacheMode == "r") args += " -cacheReadOnly";
 			else if (fbo.CacheMode == "w") args += " -cacheWriteOnly";
@@ -209,9 +209,38 @@ internal static class FastBuildHelper {
 			Msg.PrintError("FastBuild execution failed.");
 			Msg.PrintError("- Ensure FastBuild is installed: https://www.fastbuild.org/docs/quickstartguide.html");
 			Msg.PrintError("- Configure clang.Options.FastBuildOptions.Executable to the FBuild binary path");
-			Msg.PrintError("- Or disable FastBuild: clang.Options.UseFastBuild = false");
+			Msg.PrintError("- Or disable FastBuild: clang.Options.UseFastBuildMode = FastBuildMode.Disabled");
 			Msg.PrintAndAbort("Error: FastBuild failed.");
 		}
 		return res;
 	}
+
+	public static bool IsFastBuildInstalled(FastBuildOptions? fbo = null, bool verbose = false) {
+		FastBuildOptions opts = fbo ?? new FastBuildOptions();
+		Tool tool = new Tool("FastBuild");
+		string args = "-version";
+		if (verbose) {
+			Msg.Print($"Probing FastBuild: {opts.Executable} {args}");
+		}
+		ToolResult res = tool.CommandSync(opts.Executable, args, "fastbuild-version");
+		// Consider installed if the process could be executed and didn't hard-fail
+		bool ok = res.Status != ToolStatus.Failed;
+		if (verbose) {
+			if (ok) {
+				foreach (string s in res.Stdout) { if (!string.IsNullOrWhiteSpace(s)) Msg.Print(s); }
+				foreach (string s in res.Stderr) { if (!string.IsNullOrWhiteSpace(s)) Msg.PrintWarning(s); }
+			} else {
+				Msg.PrintWarning("FastBuild not found or failed to execute.");
+			}
+		}
+		return ok;
+	}
 }
+
+public static class FastBuildInstall {
+	// Convenience global helper to probe FastBuild without needing to reference options
+	public static bool IsFastBuildInstalled() => FastBuildHelper.IsFastBuildInstalled(null, false);
+}
+
+internal static partial class FastBuildHelperExtensions {}
+

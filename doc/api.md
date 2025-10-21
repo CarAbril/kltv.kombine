@@ -1616,7 +1616,7 @@ Returns: True if the process was launched, false otherwise.
  Holds the start time since cannot be fetched on exiting delegate It raises an exception at least on macos 
 
 ##### M:Kltv.Kombine.ChildProcess.ExitedExecutionHandler(System.Object,System.EventArgs)
- Handle Exited event Obtain exit code, signal process termination and dispose the process handle 
+ Handle Exited event Obtain exit code, signal process termination, and dispose the process handle 
 - sender: Sender object<br>
 - e: Event arguments<br>
 
