@@ -6,10 +6,8 @@
 
 ---------------------------------------------------------------------------------------------------------*/
 
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
-using System.Threading;
 using Kltv.Kombine.Api;
 
 namespace Kltv.Kombine {
@@ -305,7 +303,7 @@ namespace Kltv.Kombine {
 				ProcessInfo = new ProcessStartInfo();
 				if (ProcessInfo != null) {
 
-					// Set the kind of launch, process and arguments
+					// Set the kind of launch, process, and arguments
 					//
 					ProcessInfo.UseShellExecute = UseShell;
 					ProcessInfo.Arguments = Arguments;
@@ -314,10 +312,8 @@ namespace Kltv.Kombine {
 					// Disable error dialogs / window creation
 					ProcessInfo.ErrorDialog = false;
 					// Configure if we should capture the output or not					
-					ProcessInfo.CreateNoWindow = false;
-					if (OutputCapture)
-						ProcessInfo.CreateNoWindow = true;
-					// If a new window is created it should be hidden.
+					ProcessInfo.CreateNoWindow = OutputCapture;
+                    // If a new window is created, it should be hidden.
 					ProcessInfo.WindowStyle = ProcessWindowStyle.Hidden;
 					// Supplied credentials
 					// -> ProcessInfo.Domain 
@@ -325,7 +321,7 @@ namespace Kltv.Kombine {
 					// -> ProcessInfo.Password / PasswordInClearText
 					// Set Environment if we've. If Environment is empty, we don't set it and we leave the current environment to be used
 					if (!UseShell){
-						// Under shell we cannot set the environment
+						// Under shell, we cannot set the environment
 						// This is just weird.
 						if (Environment.Count > 0) {
 							foreach(KeyValuePair<string,string> entry in Environment) {
@@ -419,7 +415,7 @@ namespace Kltv.Kombine {
 
 		/// <summary>
 		/// Handle Exited event 
-		/// Obtain exit code, signal process termination and dispose the process handle
+		/// Obtain exit code, signal process termination, and dispose the process handle
 		/// </summary>
 		/// <param name="sender">Sender object</param>
 		/// <param name="e">Event arguments</param>
@@ -517,10 +513,10 @@ namespace Kltv.Kombine {
 		/// </summary>
 		private void KillPrevious() {
 			Process[] processes = Process.GetProcesses();
-			foreach (Process ProcessInstance in processes) {
-				if (ProcessInstance.ProcessName == Name) {
-					Msg.PrintMod("Kill process "+ProcessInstance.Id+":"+ProcessInstance.ProcessName,".exec",Msg.LogLevels.Debug);
-					ProcessInstance.Kill();
+			foreach (Process processInstance in processes) {
+				if (processInstance.ProcessName == Name) {
+					Msg.PrintMod("Kill process "+processInstance.Id+":"+processInstance.ProcessName,".exec",Msg.LogLevels.Debug);
+					processInstance.Kill();
 				}
 			}
 		}

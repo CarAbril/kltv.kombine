@@ -6,6 +6,8 @@
 
 ---------------------------------------------------------------------------------------------------------*/
 
+#load "extensions/fastbuild.csx"
+
 /// <summary>
 /// It provides functionality to deal with the clang compiler in top of the Kombine Tool
 /// </summary>
@@ -126,6 +128,16 @@ public class Clang {
 		public bool Verbose { get; set; } = false;
 
 		/// <summary>
+		/// Enable FastBuild integration (opt-in).
+		/// </summary>
+		public bool UseFastBuild { get; set; } = false;
+
+		/// <summary>
+		/// FastBuild specific options.
+		/// </summary>
+		public FastBuildOptions FastBuildOptions { get; set; } = new FastBuildOptions();
+
+		/// <summary>
 		/// Contains the recomended static library extension for the current platform
 		/// </summary>
 		public string LibExtension { get; private set; } = ".a";
@@ -158,6 +170,11 @@ public class Clang {
 	/// Clang Compiler Options Container
 	/// </summary>
 	public ClangOptions Options { get; private set; } = new ClangOptions();
+
+	// FastBuild accumulation state (used only when Options.UseFastBuild = true)
+	private KList fbSourcesC = new KList();
+	private KList fbSourcesCXX = new KList();
+	private KValue fbObjectsOutDir = string.Empty;
 
 	/// <summary>
 	/// Clean the provided object list and output folder
@@ -228,6 +245,36 @@ public class Clang {
 		switchesCXX = Options.SwitchesCXX.Flatten().ReduceWhitespace();
 		Msg.Print("Switches for C compiler: "+switchesCC);
 		Msg.Print("Switches for C++ compiler: "+switchesCXX);
+
+		// FastBuild path: accumulate compilation data and defer actual work to Linker/Librarian
+		if (Options.UseFastBuild) {
+			KList folders = obj.AsFolders();
+			Folders.Create(folders);
+			if (obj.Count() > 0) fbObjectsOutDir = obj[0].AsFolder();
+			for (int a = 0; a != src.Count(); a++) {
+				KValue cmd = string.Empty;
+				KValue args = string.Empty;
+				KValue srcf = RealPath(src[a]);
+				KValue objf = RealPath(obj[a]);
+				if (src[a].HasExtension(Options.CExtension)){
+					cmd = Options.CC;
+					args = "-c -MMD "+includes+" "+defines+" "+switchesCC+" "+ srcf + " -o " + objf;
+					fbSourcesC.Add(srcf);
+				}else if (src[a].HasExtension(Options.CppExtension)){
+					cmd = Options.CXX;
+					args = "-c -MMD "+includes+" "+defines+" "+switchesCXX+" " + srcf + " -o " + objf;
+					fbSourcesCXX.Add(srcf);
+				}else{
+					Msg.PrintWarning("Error: file " + src[a] + " has an unknown extension. Skipped.");
+					continue;
+				}
+				AddCompileCommands(cmd+" "+args,srcf,objf);
+			}
+			compdb?.Save();
+			Msg.Print("Compile: using FastBuild (deferred compilation)");
+			return ToolResult.DefaultNoChanges();
+		}
+
 		// Create and configure the tool
 		Tool tool = new Tool("clang");
 		// Set the number of concurrent commands to be executed
@@ -243,8 +290,8 @@ public class Clang {
 			// Fetch the absolute paths
 			KValue srcf = RealPath(src[a]);
 			KValue objf = RealPath(obj[a]);
-			// Note: We can check here for argument lenght just in case we need to use response files due to 
-			// command line lenght limitations.
+			// Note: We can check here for argument length just in case we need to use response files due to 
+			// command line length limitations.
 			// Create the arguments
 			if (src[a].HasExtension(Options.CExtension)){
 				cmd = Options.CC;
@@ -287,6 +334,42 @@ public class Clang {
 	/// <param name="output">Static library output</param>
 	/// <returns>Tool result with the execution.</returns>
 	public ToolResult Librarian(KList objs,KValue output, bool abortwhenfailed = true) {
+		// FastBuild path for static library
+		if (Options.UseFastBuild) {
+			Folders.Create(output.AsFolder());
+			if ((Host.IsLinux() || Host.IsMacOS()) ) {
+				output = output.WithNamePrefix("lib");
+			}
+			KValue bffDir = fbObjectsOutDir.IsEmpty() ? output.AsFolder() : fbObjectsOutDir;
+			Folders.Create(bffDir);
+			KValue bffPath = bffDir + "fastbuild.bff";
+			string title = output;
+			string targetName;
+			KValue bff = FastBuildHelper.GenerateBffForStaticLib(
+				title,
+				fbSourcesC,
+				fbSourcesCXX,
+				bffDir,
+				Options.IncludeDirs,
+				Options.Defines,
+				Options.SwitchesCC,
+				Options.SwitchesCXX,
+				Options.AR,
+				output,
+				Options.FastBuildOptions,
+				out targetName);
+			Files.WriteTextFile(bffPath,bff);
+			if (Options.Verbose || Options.FastBuildOptions.Verbose) {
+				Msg.Print("FastBuild .bff content:");
+				Msg.BeginIndent();
+				string bf = bff;
+				foreach (string line in bf.Split('\n')) { Msg.Print(line); }
+				Msg.EndIndent();
+			}
+			ToolResult fbr = FastBuildHelper.RunFastBuild(bffPath, "all", Options.FastBuildOptions, (uint)Options.ConcurrentBuild, Options.Verbose, abortwhenfailed);
+			return fbr;
+		}
+
 		// Create and configure the tool
 		Tool tool = new Tool("clang");
 		// We allow only one instance of the librarian running
@@ -384,6 +467,49 @@ public class Clang {
 		}
 		switchesLD = Options.SwitchesLD.Flatten().ReduceWhitespace();
 		Msg.Print("Switches for Linker: "+switchesLD);
+
+		// FastBuild path for Executable/SharedLibrary
+		if (Options.UseFastBuild) {
+			// Ensure output dir exists
+			Folders.Create(output.AsFolder());
+			// Determine where to store the .bff
+			KValue bffDir = fbObjectsOutDir.IsEmpty() ? output.AsFolder() : fbObjectsOutDir;
+			Folders.Create(bffDir);
+			KValue bffPath = bffDir + "fastbuild.bff";
+			string title = output;
+			// Generate .bff
+			string targetName;
+			KValue bff = FastBuildHelper.GenerateBffForExecutable(
+				title,
+				fbSourcesC,
+				fbSourcesCXX,
+				bffDir,
+				Options.IncludeDirs,
+				Options.Defines,
+				Options.SwitchesCC,
+				Options.SwitchesCXX,
+				Options.LibraryDirs,
+				Options.Libraries,
+				Options.SwitchesLD,
+				Options.LD,
+				Options.CC,
+				Options.CXX,
+				output,
+				SharedLibrary,
+				Options.FastBuildOptions,
+				out targetName);
+			Files.WriteTextFile(bffPath,bff);
+			if (Options.Verbose || Options.FastBuildOptions.Verbose) {
+				Msg.Print("FastBuild .bff content:");
+				Msg.BeginIndent();
+				string bf = bff;
+				foreach (string line in bf.Split('\n')) { Msg.Print(line); }
+				Msg.EndIndent();
+			}
+			ToolResult fbr = FastBuildHelper.RunFastBuild(bffPath, "all", Options.FastBuildOptions, (uint)Options.ConcurrentBuild, Options.Verbose, abortwhenfailed);
+			return fbr;
+		}
+
 		// Create the required output folder for the binary
 		Folders.Create(output.AsFolder());
 		bool ShouldLink = false;
@@ -686,6 +812,20 @@ public class Clang {
 				Options.SwitchesLD = new KList(opt.SwitchesLD);
 				Options.ConcurrentBuild = opt.ConcurrentBuild;
 				Options.Verbose = opt.Verbose;
+				Options.UseFastBuild = opt.UseFastBuild;
+				if (opt.FastBuildOptions != null) {
+					Options.FastBuildOptions = new FastBuildOptions(){
+						Executable = opt.FastBuildOptions.Executable,
+						EnableCache = opt.FastBuildOptions.EnableCache,
+						EnableDistribution = opt.FastBuildOptions.EnableDistribution,
+						CacheMode = opt.FastBuildOptions.CacheMode,
+						CachePath = opt.FastBuildOptions.CachePath,
+						WorkerConnectionLimit = opt.FastBuildOptions.WorkerConnectionLimit,
+						Verbose = opt.FastBuildOptions.Verbose,
+						ShowProgress = opt.FastBuildOptions.ShowProgress,
+						AdditionalArgs = new KList(opt.FastBuildOptions.AdditionalArgs)
+					};
+				}
 				return;
 			}
 		}		
