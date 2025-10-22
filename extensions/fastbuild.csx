@@ -1,4 +1,5 @@
-﻿/*---------------------------------------------------------------------------------------------------------
+﻿
+/*---------------------------------------------------------------------------------------------------------
 
 	Kombine FastBuild helper
 
@@ -47,9 +48,9 @@ internal static class FastBuildHelper {
 	){
 		targetName = title;
 		var sb = new System.Text.StringBuilder();
-		sb.AppendLine(";==============================================================================");
+		sb.AppendLine(";===============================================================================");
 		sb.AppendLine($"; FastBuild configuration - {title}");
-		sb.AppendLine(";==============================================================================\n");
+		sb.AppendLine(";===============================================================================\n");
 		// Settings
 		if (!string.IsNullOrEmpty(fbo.CachePath)) {
 			sb.AppendLine($"Settings {{ .CachePath = {Q(NPath(fbo.CachePath))} }}\n");
@@ -57,8 +58,8 @@ internal static class FastBuildHelper {
 			sb.AppendLine("Settings { .CachePath = '' }\n");
 		}
 		// Compilers
-		sb.AppendLine($"Compiler('Clang-C') {{ .Executable = {Q(cCompiler)} }}");
-		sb.AppendLine($"Compiler('Clang-CXX') {{ .Executable = {Q(cxxCompiler)} }}\n");
+		sb.AppendLine($"Compiler('Clang-C') {{ .Executable = {Q(NPath(cCompiler))} }}");
+		sb.AppendLine($"Compiler('Clang-CXX') {{ .Executable = {Q(NPath(cxxCompiler))} }}\n");
 		// Build compile options
 		string incs = string.Join(" ", includeDirs.Select(i => "-I" + NPath(i)));
 		string defs = string.Join(" ", defines.Select(d => "-D" + d));
@@ -99,7 +100,7 @@ internal static class FastBuildHelper {
 		if (shared) {
 			sb.AppendLine($"Executable('{exename}')");
 			sb.AppendLine("{");
-			sb.AppendLine($"    .Linker = {Q(linker)}");
+			sb.AppendLine($"    .Linker = {Q(NPath(linker))}");
 			sb.AppendLine($"    .LinkerOutput = {Q(NPath(output))}");
 			sb.AppendLine($"    .LinkerOptions = {Q(lopts)}");
 			string libsRef = anyObj ? "'objects-cxx', 'objects-c'" : "";
@@ -108,7 +109,7 @@ internal static class FastBuildHelper {
 		} else {
 			sb.AppendLine($"Executable('{exename}')");
 			sb.AppendLine("{");
-			sb.AppendLine($"    .Linker = {Q(linker)}");
+			sb.AppendLine($"    .Linker = {Q(NPath(linker))}");
 			sb.AppendLine($"    .LinkerOutput = {Q(NPath(output))}");
 			sb.AppendLine($"    .LinkerOptions = {Q(lopts)}");
 			string libsRef = anyObj ? "'objects-cxx', 'objects-c'" : "";
@@ -144,7 +145,7 @@ internal static class FastBuildHelper {
 		} else {
 			sb.AppendLine("Settings { .CachePath = '' }\n");
 		}
-		// Compilers
+		// Compilers - use 'clang' and 'clang++' directly (FastBuild will find them in PATH)
 		sb.AppendLine($"Compiler('Clang-C') {{ .Executable = 'clang' }}");
 		sb.AppendLine($"Compiler('Clang-CXX') {{ .Executable = 'clang++' }}\n");
 		// Build compile options
@@ -154,10 +155,11 @@ internal static class FastBuildHelper {
 		string scxx = string.Join(" ", switchesCXX.Select(s => s.ToString()));
 		string cOpts = $"{incs} {defs} {scc} -c \"%1\" -o \"%2\"".Trim();
 		string cxxOpts = $"{incs} {defs} {scxx} -c \"%1\" -o \"%2\"".Trim();
-		// Object lists
-		bool anyObj = false;
+		
+		// Object lists - track which ones we create
+		var objectListNames = new System.Collections.Generic.List<string>();
+		
 		if (sourcesC.Count() != 0) {
-			anyObj = true;
 			sb.AppendLine("ObjectList('objects-c')");
 			sb.AppendLine("{");
 			sb.AppendLine($"    .CompilerInputFiles = {{ {string.Join(", ", sourcesC.Select(s => Q(NPath(s))))} }}");
@@ -165,9 +167,9 @@ internal static class FastBuildHelper {
 			sb.AppendLine("    .Compiler = 'Clang-C'");
 			sb.AppendLine($"    .CompilerOptions = {Q(cOpts)}");
 			sb.AppendLine("}\n");
+			objectListNames.Add("'objects-c'");
 		}
 		if (sourcesCXX.Count() != 0) {
-			anyObj = true;
 			sb.AppendLine("ObjectList('objects-cxx')");
 			sb.AppendLine("{");
 			sb.AppendLine($"    .CompilerInputFiles = {{ {string.Join(", ", sourcesCXX.Select(s => Q(NPath(s))))} }}");
@@ -175,15 +177,31 @@ internal static class FastBuildHelper {
 			sb.AppendLine("    .Compiler = 'Clang-CXX'");
 			sb.AppendLine($"    .CompilerOptions = {Q(cxxOpts)}");
 			sb.AppendLine("}\n");
+			objectListNames.Add("'objects-cxx'");
 		}
-		// Librarian
+		
+		// Librarian - only reference ObjectLists that were actually created
 		sb.AppendLine("Library('lib-target')");
 		sb.AppendLine("{");
-		sb.AppendLine($"    .Librarian = {Q(librarian)}");
+		// Determine which compiler to use based on what we have
+		string compilerName = objectListNames.Count > 0 ? 
+			(objectListNames.Contains("'objects-cxx'") ? "'Clang-CXX'" : "'Clang-C'") : 
+			"'Clang-C'";
+		string compilerOptions = objectListNames.Count > 0 ? 
+			(objectListNames.Contains("'objects-cxx'") ? Q(cxxOpts) : Q(cOpts)) : 
+			Q(cOpts);
+		sb.AppendLine($"    .Compiler = {compilerName}");
+		sb.AppendLine($"    .CompilerOptions = {compilerOptions}");
+		sb.AppendLine($"    .CompilerOutputPath = {Q(NPath(objectsOutDir))}");
+		sb.AppendLine($"    .Librarian = {Q(NPath(librarian))}");
 		sb.AppendLine($"    .LibrarianOutput = {Q(NPath(output))}");
 		sb.AppendLine($"    .LibrarianOptions = 'rcs \"%2\" \"%1\"'");
-		string addInputs = anyObj ? "'objects-cxx', 'objects-c'" : "";
-		sb.AppendLine($"    .LibrarianAdditionalInputs = {{ {addInputs} }}");
+		
+		// Only add LibrarianAdditionalInputs if we have object lists
+		if (objectListNames.Count > 0) {
+			string inputs = string.Join(", ", objectListNames);
+			sb.AppendLine($"    .LibrarianAdditionalInputs = {{ {inputs} }}");
+		}
 		sb.AppendLine("}\n");
 		sb.AppendLine("Alias('all') { .Targets = { 'lib-target' } }");
 		return sb.ToString();
@@ -243,4 +261,3 @@ public static class FastBuildInstall {
 }
 
 internal static partial class FastBuildHelperExtensions {}
-

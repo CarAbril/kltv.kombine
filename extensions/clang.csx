@@ -871,30 +871,53 @@ public class Clang {
 	/// Retrieve from shared objects the compile options to be used in this tool if any.
 	/// </summary>
 	private void OpenSharedCompileOptions(){
-		object? obj = Share.Get("ClangOptions");
-		if (obj != null) {
-			ClangOptions? opt = Cast<ClangOptions>(obj);
-			if (opt != null) {
-				Options.CC = opt.CC;
-				Options.CXX = opt.CXX;
-				Options.LD = opt.LD;
-				Options.AR = opt.AR;
-				Options.CExtension = opt.CExtension;
-				Options.CppExtension = opt.CppExtension;
-				Options.IncludeDirs = new KList(opt.IncludeDirs);
-				Options.Defines = new KList(opt.Defines);
-				Options.SwitchesCC = new KList(opt.SwitchesCC);
-				Options.SwitchesCXX = new KList(opt.SwitchesCXX);
-				Options.LibraryDirs = new KList(opt.LibraryDirs);
-				Options.Libraries = new KList(opt.Libraries);
-				Options.SwitchesLD = new KList(opt.SwitchesLD);
-				Options.ConcurrentBuild = opt.ConcurrentBuild;
-				Options.Verbose = opt.Verbose;
-				Options.UseFastBuildMode = opt.UseFastBuildMode;
-				// Do NOT copy FastBuildOptions to avoid cross-script type identity issues.
-				// Each script instance keeps its own FastBuildOptions with defaults or script-local configuration.
-				return;
-			}
-		}		
+		// Load individual shared values
+		object? cc = Share.Get("ClangOptions.CC");
+		if (cc != null) Options.CC = (string)cc;
+		
+		object? cxx = Share.Get("ClangOptions.CXX");
+		if (cxx != null) Options.CXX = (string)cxx;
+		
+		object? ld = Share.Get("ClangOptions.LD");
+		if (ld != null) Options.LD = (string)ld;
+		
+		object? ar = Share.Get("ClangOptions.AR");
+		if (ar != null) Options.AR = (string)ar;
+		
+		object? cext = Share.Get("ClangOptions.CExtension");
+		if (cext != null) Options.CExtension = (string)cext;
+		
+		object? cppext = Share.Get("ClangOptions.CppExtension");
+		if (cppext != null) Options.CppExtension = (string)cppext;
+		
+		object? incDirs = Share.Get("ClangOptions.IncludeDirs");
+		if (incDirs is KList incDirsList) Options.IncludeDirs = new KList(incDirsList);
+		
+		object? defines = Share.Get("ClangOptions.Defines");
+		if (defines is KList definesList) Options.Defines = new KList(definesList);
+		
+		object? switchesCC = Share.Get("ClangOptions.SwitchesCC");
+		if (switchesCC is KList switchesCCList) Options.SwitchesCC = new KList(switchesCCList);
+		
+		object? switchesCXX = Share.Get("ClangOptions.SwitchesCXX");
+		if (switchesCXX is KList switchesCXXList) Options.SwitchesCXX = new KList(switchesCXXList);
+		
+		object? libDirs = Share.Get("ClangOptions.LibraryDirs");
+		if (libDirs is KList libDirsList) Options.LibraryDirs = new KList(libDirsList);
+		
+		object? libs = Share.Get("ClangOptions.Libraries");
+		if (libs is KList libsList) Options.Libraries = new KList(libsList);
+		
+		object? switchesLD = Share.Get("ClangOptions.SwitchesLD");
+		if (switchesLD is KList switchesLDList) Options.SwitchesLD = new KList(switchesLDList);
+		
+		object? concBuild = Share.Get("ClangOptions.ConcurrentBuild");
+		if (concBuild != null) Options.ConcurrentBuild = (int)concBuild;
+		
+		object? verbose = Share.Get("ClangOptions.Verbose");
+		if (verbose != null) Options.Verbose = (bool)verbose;
+		
+		object? fbMode = Share.Get("ClangOptions.UseFastBuildMode");
+		if (fbMode != null) Options.UseFastBuildMode = (FastBuildMode)fbMode;
 	}
 }
