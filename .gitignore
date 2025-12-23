@@ -6,3 +6,4 @@ out
 examples/sdl2/sdl.github/**/*
 examples/msys2/openssl/**/*
 
+.idea/
