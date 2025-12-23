@@ -171,6 +171,10 @@ public class Clang {
 	/// </summary>
 	public ClangOptions Options { get; private set; } = new ClangOptions();
 
+	/// <summary>
+	/// List of all the warnings found during the build
+	/// </summary>
+	public KList BuildWarnings { get; set; } = new KList();
 
 	/// <summary>
 	/// Delegate used to be called when a file is about to be processed.
@@ -330,6 +334,17 @@ public class Clang {
 		}
 		if (res.Status == ToolStatus.NoChanges) {
 			Msg.Print("Compile: Nothing has done. Everything up to date.");
+		}
+		else if (res.Status == ToolStatus.Warnings || res.Status == ToolStatus.Errors) {
+			Msg.PrintTaskWarning("Compile completed with warnings.");
+			Msg.BeginIndent();
+			foreach (string w in BuildWarnings) {
+				Msg.PrintWarning(w);
+			}
+			Msg.EndIndent();
+			BuildWarnings.Clear();
+		} else {
+			Msg.PrintTaskSuccess("Compile completed successfully.");
 		}
 		// Update compdb
 		compdb?.Save();
@@ -588,8 +603,10 @@ public class Clang {
 			Msg.BeginIndent();
 			foreach (string s in res.Stderr) {
 				string s2 = s.Replace("\n", "").Replace("\r", "");
-				if (s2 != string.Empty)
+				if (s2 != string.Empty)	{
 					Msg.PrintWarning(s2);
+					BuildWarnings.Add(s2);
+				}
 			}
 			Msg.EndIndent();
 			res.Status = ToolStatus.Warnings;
