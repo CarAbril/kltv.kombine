@@ -5,8 +5,19 @@
 	(C)Kollective Networks 2022
 
 ---------------------------------------------------------------------------------------------------------*/
+
+//
+// Use the clang and git extensions
+//
 #load "extensions/clang.csx"
 #load "extensions/git.csx"
+
+// Remember, this is just used for intellisense, nothing else
+#r "../../out/bin/win-x64/debug/mkb.dll"
+using Kltv.Kombine.Api;
+using Kltv.Kombine.Types;
+using static Kltv.Kombine.Api.Statics;
+using static Kltv.Kombine.Api.Tool;
 
 KValue Name = "sdl2";
 KValue OutputBin = KValue.Import("OutputBin","out/bin/");
@@ -49,7 +60,7 @@ int build(string[] args){
 	// Download SDL2 library from github
 	if (Folders.Exists("sdl.github/")) {
 		Msg.Print("Updating SDL2 sources");
-		//Git.Pull("sdl.github/");
+		Git.Pull(CurrentScriptFolder+"/sdl.github/");
 	} else {
 		Msg.Print("Cloning SDL2 sources");
 		Git.Clone("https://github.com/libsdl-org/SDL.git","sdl.github/","release-2.30.x");

@@ -7,7 +7,7 @@
 ---------------------------------------------------------------------------------------------------------*/
 
 // Remember, this is just used for intellisense, nothing else
-#r "mkb.dll"
+#r "../../out/bin/win-x64/debug/mkb.dll"
 using Kltv.Kombine.Api;
 using Kltv.Kombine.Types;
 using static Kltv.Kombine.Api.Statics;
@@ -73,7 +73,7 @@ Msg.Print("The new list is: "+src6.Flatten());
 
 //
 // KValue examples
-// 
+//
 // --------------------------------------------------------------------------------------------------------------------
 KValue a = "my value";
 KValue b = "        my second value";

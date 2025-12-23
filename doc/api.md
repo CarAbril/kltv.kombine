@@ -60,7 +60,7 @@ Returns: Argument or empty if out of bounds of the array.
  Compress a single folder into a tar file. 
 - folderPath: Folder to be compressed<br>
 - outputFile: Output tar file<br>
-- overwrite: If archive should be overwriten, default true<br>
+- overwrite: If archive should be overwritten, default true<br>
 - includeFolder: If true, include the folder in the tar file.<br>
 - compressionType: Compression type, default gzip<br>
 Returns: True if fine, false otherwise.
@@ -70,7 +70,7 @@ Returns: True if fine, false otherwise.
  Compress a list of folders into a tar file. 
 - folderPaths: Folders to be compressed<br>
 - outputFile: Output tar file<br>
-- overwrite: If archive should be overwriten, default true<br>
+- overwrite: If archive should be overwritten, default true<br>
 - includeFolder: If true, include the given folders in the tar file and not only the folder contents an descentants.<br>
 - compressionType: Compression type, default gzip<br>
 Returns: True if fine, false otherwise.
@@ -89,7 +89,7 @@ Returns: True if fine, false otherwise.
  Decompress a tar file into a folder. 
 - tarPath: Tar file to decompress<br>
 - outputFolder: Output folder<br>
-- overwrite: If archive(s) should be overwriten, default true<br>
+- overwrite: If archive(s) should be overwritten, default true<br>
 Returns: True if fine, false otherwise.
 
 
@@ -312,31 +312,32 @@ Returns: An string with the current working folder.
 - target: <br>
 
 # T:Kltv.Kombine.Api.Folders.CopyOptions
-
+ Copy options for folder copy operation 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.Default
 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.IncludeSubFolders
-
+ Include subfolders when copying 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.OnlyModifiedFiles
-
+ Only copy modified files 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.ShowProgress
-
+ Show progress during copy operation 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.OnlyFolders
-
+ Copy only folders, not files 
 
 ##### F:Kltv.Kombine.Api.Folders.CopyOptions.DeleteMissingFiles
+ Delete missing files in target that are not present in source (mirror copy) 
 
-
-##### M:Kltv.Kombine.Api.Folders.Copy(System.String,System.String,Kltv.Kombine.Api.Folders.CopyOptions)
-
-- Source: <br>
-- Target: <br>
-- Options: <br>
+##### M:Kltv.Kombine.Api.Folders.Copy(System.String,System.String,Kltv.Kombine.Api.Folders.CopyOptions,System.String)
+ Copies a folder from source to target with several options 
+- Source: Source folder (required)<br>
+- Target: Destination folder (required)<br>
+- Options: Options to copy (optional)<br>
+- FileMask: File mask to be used in the copy operation (optional)<br>
 Returns: 
 
 
@@ -779,8 +780,30 @@ Returns: the escaped argument
 
 ##### M:Kltv.Kombine.Api.Statics.Cast``1(System.Object)
  Cast an object to another type trying to copy as much as possible. 
+##### Type Parameter: T
+Returned type
 - myobj: Object to be casted<br>
 Returns: A new created object of the new type or null if invalid.
+
+
+##### M:Kltv.Kombine.Api.Statics.MkbVersion
+ Retuns the Kombine version string. 
+Returns: The string in dot formated
+
+
+##### M:Kltv.Kombine.Api.Statics.MkbMajorVersion
+ Returns the major version number. 
+Returns: The major version
+
+
+##### M:Kltv.Kombine.Api.Statics.MkbMinorVersion
+ Returns the minor version number. 
+Returns: The minor version
+
+
+##### M:Kltv.Kombine.Api.Statics.MkbHexVersion
+ Returns the najor+minor version as a hex value. 
+Returns: The version
 
 
 # T:Kltv.Kombine.Api.Tool
@@ -1703,6 +1726,10 @@ Returns:
 
 ##### M:Kltv.Kombine.DictionaryExtensions.Clone``2(System.Collections.Generic.Dictionary{``0,``1})
  Dictionary clone method 
+##### Type Parameter: TKey
+Key type
+##### Type Parameter: TValue
+Value type
 - dictionary: Dictionary to clone<br>
 Returns: A new dictionary instance with all the contents cloned
 

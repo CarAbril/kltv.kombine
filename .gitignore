@@ -4,6 +4,7 @@ obj
 out
 /**/mkb.dll
 examples/sdl2/sdl.github/**/*
+examples/msys2/openssl/**/*
 
 
 .idea/.idea.kltv.dir/.idea/
